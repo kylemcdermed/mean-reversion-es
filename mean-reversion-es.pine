@@ -1,0 +1,77 @@
+//@version=5
+strategy("ES Mean Reversion Strategy", shorttitle="ES Mean Rev", overlay=true, 
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10, 
+         pyramiding=0, calc_on_every_tick=true)
+
+// Bollinger Bands Parameters
+length = input.int(20, title="Moving Average Length", minval=1, group="Bollinger Bands")
+source = input.source(close, title="Price Source", group="Bollinger Bands")
+
+// Risk Management
+risk_per_trade = input.float(5.0, title="Risk Per Trade (%)", minval=1.0, maxval=20.0, group="Risk Management")
+
+// Calculate Moving Average and Standard Deviation
+ma = ta.sma(source, length)
+std_dev = ta.stdev(source, length)
+
+// Bollinger Bands - 2 Standard Deviations for Entry
+upper_bb_2std = ma + (2.0 * std_dev)
+lower_bb_2std = ma - (2.0 * std_dev)
+
+// 1 Standard Deviation for Exit
+upper_bb_1std = ma + (1.0 * std_dev)
+lower_bb_1std = ma - (1.0 * std_dev)
+
+// Plot Bollinger Bands
+p1 = plot(ma, "Moving Average", color.blue, 2)
+p2 = plot(upper_bb_2std, "Upper BB (2 Std)", color.red, 2)
+p3 = plot(lower_bb_2std, "Lower BB (2 Std)", color.green, 2)
+p4 = plot(upper_bb_1std, "Upper BB (1 Std)", color.orange, 1, plot.style_linebr)
+p5 = plot(lower_bb_1std, "Lower BB (1 Std)", color.orange, 1, plot.style_linebr)
+
+// Entry Conditions
+// Buy when price drops below -2 std dev (oversold)
+long_entry_condition = close < lower_bb_2std
+
+// Short when price rises above +2 std dev (overbought)  
+short_entry_condition = close > upper_bb_2std
+
+// Exit Conditions
+// Exit long when price reverts back above -1 std dev
+long_exit_condition = close > lower_bb_1std
+
+// Exit short when price reverts back below +1 std dev
+short_exit_condition = close < upper_bb_1std
+
+// Calculate Position Size
+position_size = (strategy.equity * risk_per_trade / 100) / close
+
+// Entry Logic
+if long_entry_condition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long, qty=position_size, comment="Buy Oversold")
+
+if short_entry_condition and strategy.position_size == 0
+    strategy.entry("Short", strategy.short, qty=position_size, comment="Sell Overbought")
+
+// Exit Logic
+if strategy.position_size > 0 and long_exit_condition
+    strategy.close("Long", comment="Exit Long")
+
+if strategy.position_size < 0 and short_exit_condition
+    strategy.close("Short", comment="Exit Short")
+
+// Visual Entry/Exit Signals
+plotshape(long_entry_condition, title="Long Entry", location=location.belowbar, 
+          style=shape.triangleup, color=color.green, size=size.normal, text="BUY")
+          
+plotshape(short_entry_condition, title="Short Entry", location=location.abovebar, 
+          style=shape.triangledown, color=color.red, size=size.normal, text="SELL")
+
+plotshape(long_exit_condition and strategy.position_size > 0, title="Long Exit", 
+          location=location.belowbar, style=shape.circle, color=color.orange, size=size.small, text="EXIT")
+          
+plotshape(short_exit_condition and strategy.position_size < 0, title="Short Exit", 
+          location=location.abovebar, style=shape.circle, color=color.orange, size=size.small, text="EXIT")
+
+// Background highlighting for extreme conditions
+bgcolor(close > upper_bb_2std ? color.new(color.red, 90) : close < lower_bb_2std ? color.new(color.green, 90) : na, title="Extreme Price Zones")
